@@ -1,3 +1,4 @@
+from matplotlib.tri import Triangulation
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -5,51 +6,13 @@ import scipy
 import scipy.linalg
 import time
 
+#arrow_list = []
+
 class Lattice():
-    """ def __init__(self, Nshape, sites, lattice_vectors=1, sublattice_vectors=0, site_coordination=-1, site_potential=0, special_hops=[]):
-        self.Nshape = Nshape
-        if isinstance(self.Nshape, tuple):
-            self.dims = len(self.Nshape)
-        else:
-            self.dims  = 1
-        self.sites = sites
-        self.lattice_vectors = lattice_vectors
-        self.sublattice_vectors = sublattice_vectors
-
-        self.reciprocal_vectors = self.ReciprocalVectors()
-
-        self.labels = self.Labels()
-        self.mlabels = self.MomentumLabels()
-
-        self.bounds = self.GetBounds()
-        self.neighbor_vectors = self.NeighborVectors()
-
-        self.matrix_dim = len(self.labels)
-
-        self.site_coordination = site_coordination
-        self.site_potential = site_potential
-        if site_potential == 0 and self.sites > 1:
-            self.site_potential = [0 for i in range(self.sites)]
+    def __init__(self, Nshape, sites, lattice_vectors=1, sublattice_vectors=0, site_coordination=-1, site_potential=0, special_hops=[], special_site_hops=[], periodic=[]):
         
-        self.special_hops = special_hops
+        debug = False
 
-        self.H = self.generateHamiltonian()
-        self.F = self.generateFourier()
-        self.Hk = self.F.getH() @ self.H @ self.F
-
-        self.energies = self.getEnergyBands()
-        self.momentums = 0
-        if self.dims > 1:
-            self.momentums = []
-            mom = np.array([self.MomentumLabelToK(self.mlabels[i]) for i in range(len(self.H))])[::self.sites]
-            for dim in range(self.dims):
-                self.momentums.append(mom[:, dim])
-            self.momentums = np.array(self.momentums)
-        else:
-            self.momentums = np.array([self.MomentumLabelToK(self.mlabels[i]) for i in range(len(self.H))])[::self.sites]
-        self.fermi_level = self.getFermiLevel() """ 
-
-    def __init__(self, Nshape, sites, lattice_vectors=1, sublattice_vectors=0, site_coordination=-1, site_potential=0, special_hops=[]):
         self.Nshape = Nshape
         if isinstance(self.Nshape, tuple):
             self.dims = len(self.Nshape)
@@ -59,30 +22,34 @@ class Lattice():
         self.lattice_vectors = lattice_vectors
         self.sublattice_vectors = sublattice_vectors
 
-        # Time measurement for ReciprocalVectors
         start_time = time.time()
         self.reciprocal_vectors = self.ReciprocalVectors()
-        print(f"ReciprocalVectors took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"ReciprocalVectors took {time.time() - start_time:.4f} seconds")
 
-        # Time measurement for Labels
         start_time = time.time()
         self.labels = self.Labels()
-        print(f"Labels took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"Labels took {time.time() - start_time:.4f} seconds")
 
-        # Time measurement for MomentumLabels
         start_time = time.time()
         self.mlabels = self.MomentumLabels()
-        print(f"MomentumLabels took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"MomentumLabels took {time.time() - start_time:.4f} seconds")
 
-        # Time measurement for GetBounds
         start_time = time.time()
         self.bounds = self.GetBounds()
-        print(f"GetBounds took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"GetBounds took {time.time() - start_time:.4f} seconds")
 
-        # Time measurement for NeighborVectors
         start_time = time.time()
         self.neighbor_vectors = self.NeighborVectors()
-        print(f"NeighborVectors took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"NeighborVectors took {time.time() - start_time:.4f} seconds")
+
+        self.periodic = periodic
+        if len(periodic) == 0:
+            self.periodic = False
 
         self.matrix_dim = len(self.labels)
 
@@ -92,48 +59,47 @@ class Lattice():
             self.site_potential = [0 for i in range(self.sites)]
         
         self.special_hops = special_hops
+        self.special_site_hops = special_site_hops
 
-        # Time measurement for generateHamiltonian
         start_time = time.time()
         self.H = self.generateHamiltonian()
-        print(f"generateHamiltonian took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"generateHamiltonian took {time.time() - start_time:.4f} seconds")
 
-        # Time measurement for generateFourier
         start_time = time.time()
         self.F = self.generateFourier()
-        print(f"generateFourier took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"generateFourier took {time.time() - start_time:.4f} seconds")
 
-        # Time measurement for Hk calculation
         start_time = time.time()
-        #self.Hk = self.F.getH() @ self.H @ self.F
         self.Hk = self.getHk()
-        print(f"Hk calculation took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"Hk calculation took {time.time() - start_time:.4f} seconds")
 
-        # Time measurement for getEnergyBands
         start_time = time.time()
-        self.energies = self.getEnergyBands()
-        print(f"getEnergyBands took {time.time() - start_time:.4f} seconds")
+        self.energies, self.eigenvectors = self.getEnergyBands()
+        if debug:
+            print(f"getEnergyBands took {time.time() - start_time:.4f} seconds")
 
         self.momentums = 0
         if self.dims > 1:
-            # Time measurement for momentum calculations in higher dimensions
-            start_time = time.time()
             self.momentums = []
             mom = np.array([self.MomentumLabelToK(self.mlabels[i]) for i in range(len(self.H))])[::self.sites]
             for dim in range(self.dims):
                 self.momentums.append(mom[:, dim])
             self.momentums = np.array(self.momentums)
-            print(f"Momentum calculations (dims>1) took {time.time() - start_time:.4f} seconds")
         else:
-            # Time measurement for momentum calculation in 1D
-            start_time = time.time()
             self.momentums = np.array([self.MomentumLabelToK(self.mlabels[i]) for i in range(len(self.H))])[::self.sites]
-            print(f"Momentum calculation (1D) took {time.time() - start_time:.4f} seconds")
 
-        # Time measurement for getFermiLevel
         start_time = time.time()
         self.fermi_level = self.getFermiLevel()
-        print(f"getFermiLevel took {time.time() - start_time:.4f} seconds")
+        if debug:
+            print(f"getFermiLevel took {time.time() - start_time:.4f} seconds")
+
+        start_time = time.time()
+        self.berry_flux = self.getBerryFlux()
+        if debug:
+            print(f"getFermiLevel took {time.time() - start_time:.4f} seconds")
     
     def Labels(self):
         labels = []
@@ -245,7 +211,28 @@ class Lattice():
             return tuple(pos)
         else:
             return label[0]*self.reciprocal_vectors
-            
+        
+    def MomentumLabelToLabel(self, mlabel):
+        if self.dims > 1:
+            pos = []
+            for dim in range(self.dims):
+                pos.append(mlabel[0][dim] + 1)
+            label = (tuple(pos), mlabel[1])
+            return label
+        else:
+            label = (mlabel[0]+1, mlabel[1])
+            return label
+        
+    def LabelToMomentumLabel(self, label):
+        if self.dims > 1:
+            pos = []
+            for dim in range(self.dims):
+                pos.append(label[0][dim] + 1)
+            mlabel = (tuple(pos), label[1])
+            return mlabel
+        else:
+            mlabel = (label[0]+1, label[1])
+            return mlabel
 
     def getNeighbor(self, label, vector):
         pos = []
@@ -261,6 +248,21 @@ class Lattice():
             return (tuple(pos), site)
         else:
             return (pos, site)
+    
+    def getMomentumNeighbor(self, mlabel, vector):
+        mom = []
+        if self.dims > 1:
+            for dim in range(self.dims):
+                mom.append((mlabel[0][dim] + vector[dim]) % self.Nshape[dim])
+        else:
+            mom = (mlabel[0] + vector[0]) % self.Nshape
+
+        site = chr((ord(mlabel[1]) - ord("a") + vector[-1]) % self.sites + ord("a"))
+
+        if self.dims > 1:
+            return (tuple(mom), site)
+        else:
+            return (mom, site)
 
     def GetBounds(self):
         if self.dims > 1:
@@ -292,13 +294,13 @@ class Lattice():
             for dim in range(self.dims):
                 diff = label2[0][dim] - label1[0][dim]
                 if abs(diff) > self.Nshape[dim]/2:
-                    vector.append(np.round(diff - self.Nshape[dim], 5))
+                    vector.append(np.round(diff - self.Nshape[dim], 5)) # round
                 else:
                     vector.append(diff)
         else:
             diff = label2[0] - label1[0]
             if abs(diff) > self.Nshape/2:
-                vector.append(np.round(diff - self.Nshape, 5))
+                vector.append(np.round(diff - self.Nshape, 5)) # round
             else:
                 vector.append(diff)
         
@@ -317,7 +319,7 @@ class Lattice():
             dist_dict = {}
             label1 = (self.labels[0][0], chr(site + ord("a")))
             for label2 in self.labels:
-                dist = np.round(self.getDistance(label1, label2), 5)
+                dist = np.round(self.getDistance(label1, label2), 5) # Round
                 if dist == 0:
                     continue
                 vector = self.getVector(label1, label2)
@@ -367,6 +369,14 @@ class Lattice():
                 j = self.LabelToIndex(label2)
                 
                 H[i, j] = hop[1]
+            
+            # Special Site Hops
+            if len(self.special_site_hops) > 0:
+                for hop in self.special_site_hops[current_site]:
+                    label2 = self.getNeighbor(label1, hop[0]) # Get label of site after moving vector
+                    j = self.LabelToIndex(label2)
+                    
+                    H[i, j] = hop[1]
 
         return H
 
@@ -448,14 +458,16 @@ class Lattice():
     def getEnergyBands(self):
         if self.sites == 1:
             return np.array([self.Hk[i, i] for i in range(len(self.H))])
-        energies = [[] for i in range(self.sites)]
+        energy_list = [[] for i in range(self.sites)]
+        eigenvector_list = [[] for i in range(self.sites)]
         for i in range(self.matrix_dim//self.sites):
             block_Hk = self.Hk[self.sites*(i):self.sites*(i+1), self.sites*(i):self.sites*(i+1)]
-            eigs = np.linalg.eigh(block_Hk).eigenvalues
+            eigenvalues, eigenvectors = np.linalg.eigh(block_Hk)
             for site in range(self.sites):
-                energies[site].append(eigs[site])
+                energy_list[site].append(eigenvalues[site])
+                eigenvector_list[site].append(eigenvectors[:,site])
         
-        return np.array(energies).real
+        return np.array(energy_list).real, np.array(eigenvector_list)
 
     def getFermiLevel(self):
         if self.sites == 1:
@@ -464,10 +476,45 @@ class Lattice():
         else:
             sorted_energy = np.sort(self.energies.ravel())
             return (sorted_energy[self.matrix_dim//2-1] + sorted_energy[self.matrix_dim//2])/2
+
+
+
+    def calculateLabelBerryFlux(self, mlabel):
+        total = 1
+        phase = 0
+        vector_list = np.array([(1, 0, 0), (0, 1, 0), (-1, 0, 0), (0, -1, 0)])
+        mlabel1 = mlabel
+        current_site = ord(mlabel1[1]) - ord("a")
+        for i in range(len(vector_list)):
+            mlabel2 = self.getMomentumNeighbor(mlabel1, vector_list[i])
+
+            #print(mlabel1, mlabel2)
+            #arrow_list.append((mlabel1, mlabel2))
+
+            index1 = (self.LabelToIndex(self.MomentumLabelToLabel(mlabel1)) // self.sites)
+            index2 = (self.LabelToIndex(self.MomentumLabelToLabel(mlabel2)) // self.sites)
+            
+            #p = np.angle(self.eigenvectors[current_site][index1].ravel() @ self.eigenvectors[current_site][index2].ravel())
+            phase += np.angle(np.conj(self.eigenvectors[current_site][index1].ravel()) @ self.eigenvectors[current_site][index2].ravel())
+            total *= (np.conj(self.eigenvectors[current_site][index1].ravel()) @ self.eigenvectors[current_site][index2].ravel())
+            mlabel1 = mlabel2
         
-    #def getBandSlice(self, momentum):
-
-
+        #if abs(phase - np.angle(total)) > 0.001:
+        #    print(phase, np.angle(total))
+        #return phase
+        return np.angle(total)
+    
+    def getBerryFlux(self):
+        berry_flux = [[] for i in range(self.sites)]
+        for mlabel in self.mlabels:
+            current_site = ord(mlabel[1]) - ord("a")
+            berry_flux[current_site].append(self.calculateLabelBerryFlux(mlabel))
+        
+        return np.array(berry_flux)
+    
+    def calculateChernNumber(self):
+        return np.round(np.sum(self.berry_flux[0])/(2*np.pi),5)
+        # return np.array([np.sum(self.berry_flux[i])/(2*np.pi) for i in range(self.sites)])
     
 # Hydrogen
 #hydrogen = Lattice(100, 1, 1, 0)
@@ -684,17 +731,17 @@ phi = 0.7
 forward = -tp*np.exp(1j*phi)
 backward = -tp*np.exp(-1j*phi) 
 
-special_hops = [((1, 0, 0), forward), ((-1, 1, 0), forward), ((0, -1, 0), forward), ((-1, 0, 0), backward), ((1, -1, 0), backward), ((0, 1, 0), backward)]
-haldane = Lattice((50,50), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M, -M], special_hops=special_hops)
+special_hops_a = [((1, 0, 0), forward), ((-1, 1, 0), forward), ((0, -1, 0), forward), ((-1, 0, 0), backward), ((1, -1, 0), backward), ((0, 1, 0), backward)]
+special_hops_b = [((1, 0, 0), backward), ((-1, 1, 0), backward), ((0, -1, 0), backward), ((-1, 0, 0), forward), ((1, -1, 0), forward), ((0, 1, 0), forward)]
+special_site_hops = [special_hops_a,special_hops_b]
+haldane = Lattice((50,50), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M, -M], special_site_hops=special_site_hops)
 print("Haldane:")
 
 save = True
-plt.figure()
-plt.matshow(haldane.Hk.real)
-if save:
-    plt.savefig("images/Haldane_Hk.png")
-
-plt.figure()
+#plt.figure()
+#plt.matshow(haldane.Hk.real)
+#if save:
+#    plt.savefig("images/Haldane_Hk.png")
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
@@ -728,4 +775,190 @@ if save:
     plt.savefig("images/Haldane_Evk_with_slice.png")
 
 plt.show() """
-        
+
+
+# Haldane Pt. 2
+
+""" save = True
+
+tp = 0.3
+phi = 0.7
+forward = -tp*np.exp(1j*phi)
+backward = -tp*np.exp(-1j*phi)
+
+special_hops_a = [((1, 0, 0), forward), ((-1, 1, 0), forward), ((0, -1, 0), forward), ((-1, 0, 0), backward), ((1, -1, 0), backward), ((0, 1, 0), backward)]
+special_hops_b = [((1, 0, 0), backward), ((-1, 1, 0), backward), ((0, -1, 0), backward), ((-1, 0, 0), forward), ((1, -1, 0), forward), ((0, 1, 0), forward)]
+special_site_hops = [special_hops_a,special_hops_b]
+
+E_list = []
+M_list = np.linspace(0,2, 50)
+for M in M_list:
+    haldane = Lattice((25,25), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M, -M], special_site_hops=special_site_hops)
+    E_list.append(np.min(haldane.energies[1] - haldane.energies[0]))
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+
+ax.scatter(M_list, np.array(E_list))
+plt.xlabel("M")
+plt.ylabel("E")
+
+if save:
+    plt.savefig("images/Haldane_EvM.png") 
+plt.show() """
+
+""" M_1 = 0.8
+M_2 = 1.2
+tp = 0.3
+phi = 0.7
+forward = -tp*np.exp(1j*phi)
+backward = -tp*np.exp(-1j*phi)
+special_hops_a = [((1, 0, 0), forward), ((-1, 1, 0), forward), ((0, -1, 0), forward), ((-1, 0, 0), backward), ((1, -1, 0), backward), ((0, 1, 0), backward)]
+special_hops_b = [((1, 0, 0), backward), ((-1, 1, 0), backward), ((0, -1, 0), backward), ((-1, 0, 0), forward), ((1, -1, 0), forward), ((0, 1, 0), forward)]
+special_site_hops = [special_hops_a,special_hops_b]
+haldane1 = Lattice((50,50), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M_1, -M_1], special_site_hops=special_site_hops)
+haldane2 = Lattice((50,50), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M_2, -M_2], special_site_hops=special_site_hops)
+
+save = True
+
+kx = haldane1.momentums[0]
+ky = haldane1.momentums[1]
+berry_flux = haldane1.berry_flux
+
+N = haldane1.Nshape
+kx_grid = kx.reshape(N[0], N[1])
+ky_grid = ky.reshape(N[0], N[1])
+
+plt.figure(figsize=(10, 8))
+
+for site in range(haldane1.sites):
+    flux_grid = berry_flux[site].reshape(N[0], N[1])
+    
+    plt.subplot(1, 2, site + 1)
+    plt.contourf(kx_grid, ky_grid, flux_grid, levels=20, cmap='viridis')
+    plt.colorbar(label='Berry Flux (radians)')
+    plt.xlabel('$k_x$')
+    plt.ylabel('$k_y$')
+    plt.title(f'Berry Flux Contour for Sublattice {chr(ord("a") + site)}')
+    plt.grid(True, linestyle='--', alpha=0.5)
+
+if save:
+    plt.savefig("images/Berry_0_8_contour.png")
+
+kx = haldane2.momentums[0]
+ky = haldane2.momentums[1]
+berry_flux = haldane2.berry_flux
+
+N = haldane2.Nshape
+kx_grid = kx.reshape(N[0], N[1])
+ky_grid = ky.reshape(N[0], N[1])
+
+plt.figure(figsize=(10, 8))
+
+for site in range(haldane2.sites):
+    flux_grid = berry_flux[site].reshape(N[0], N[1])
+    
+    plt.subplot(1, 2, site + 1)
+    plt.contourf(kx_grid, ky_grid, flux_grid, levels=20, cmap='viridis')
+    plt.colorbar(label='Berry Flux (radians)')
+    plt.xlabel('$k_x$')
+    plt.ylabel('$k_y$')
+    plt.title(f'Berry Flux Contour for Sublattice {chr(ord("a") + site)}')
+    plt.grid(True, linestyle='--', alpha=0.5)
+
+if save:
+    plt.savefig("images/Berry_0_8_contour.png")
+
+print("Chern M = 0.8:", haldane1.calculateChernNumber())
+print("Chern M = 1.2:", haldane2.calculateChernNumber())
+
+plt.show() """
+
+save = True
+
+tp = 0.3
+phi = 0.7
+forward = -tp*np.exp(1j*phi)
+backward = -tp*np.exp(-1j*phi)
+
+special_hops_a = [((1, 0, 0), forward), ((-1, 1, 0), forward), ((0, -1, 0), forward), ((-1, 0, 0), backward), ((1, -1, 0), backward), ((0, 1, 0), backward)]
+special_hops_b = [((1, 0, 0), backward), ((-1, 1, 0), backward), ((0, -1, 0), backward), ((-1, 0, 0), forward), ((1, -1, 0), forward), ((0, 1, 0), forward)]
+special_site_hops = [special_hops_a,special_hops_b]
+
+C_list = []
+M_list = np.linspace(0,2,50)
+for M in M_list:
+    haldane = Lattice((25,25), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M, -M], special_site_hops=special_site_hops)
+    chern = haldane.calculateChernNumber()
+    C_list.append(chern)
+    print(M, chern)
+
+fig = plt.figure()
+ax = fig.add_subplot(111)
+
+ax.scatter(M_list, np.array(C_list))
+plt.xlabel("M")
+plt.ylabel("Chern Number")
+
+if save:
+    plt.savefig("images/Haldane_CvM.png") 
+plt.show()
+
+""" save = True
+
+M = 1
+
+tp = 0.3
+phi = 0.7
+forward = -tp*np.exp(1j*phi)
+backward = -tp*np.exp(-1j*phi)
+
+special_hops_a = [((1, 0, 0), forward), ((-1, 1, 0), forward), ((0, -1, 0), forward), ((-1, 0, 0), backward), ((1, -1, 0), backward), ((0, 1, 0), backward)]
+special_hops_b = [((1, 0, 0), backward), ((-1, 1, 0), backward), ((0, -1, 0), backward), ((-1, 0, 0), forward), ((1, -1, 0), forward), ((0, 1, 0), forward)]
+special_site_hops = [special_hops_a,special_hops_b]
+haldane = Lattice((5,5), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M, -M], special_site_hops=special_site_hops)
+
+mom = [haldane.MomentumLabelToK(mlabel) for mlabel in haldane.mlabels]
+plt.figure()
+plt.plot(*zip(*mom), marker='o', color='b', ls='')
+plt.title("Haldane Atom Momentums")
+plt.xlabel("kx")
+plt.xlabel("ky")
+
+for arrow in arrow_list:
+    mlabel1 = arrow[0]
+    mlabel2 = arrow[1]
+
+    mdx = mlabel2[0][0] - mlabel1[0][0]
+    mdy = mlabel2[0][1] - mlabel1[0][1]
+
+    if mdx > 1:
+        mlabel2 = ((mlabel1[0][0]-1, mlabel1[0][1]), mlabel1[1])
+    if mdx < -1:
+        mlabel2 = ((mlabel1[0][0]+1, mlabel1[0][1]), mlabel1[1])
+    
+    if mdy > 1:
+        mlabel2 = ((mlabel1[0][0], mlabel1[0][1]-1), mlabel1[1])
+    if mdy < -1:
+        mlabel2 = ((mlabel1[0][0], mlabel1[0][1]+1), mlabel1[1])
+    
+    color="b"
+    if mdx > 1 or mdx < -1 or mdy > 1 or mdy < -1:
+        color = "r"
+
+    mom1 = haldane.MomentumLabelToK(mlabel1)
+    mom2 = haldane.MomentumLabelToK(mlabel2)
+
+    dx = mom2[0] - mom1[0]
+    dy = mom2[1] - mom1[1]
+
+    if color == "r":
+        plt.arrow(mom1[0]+0.1, mom1[1]+0.1, dx, dy, length_includes_head=True, head_width=0.15, head_length=0.2, color=color)
+    else:
+        plt.arrow(mom1[0],mom1[1], dx, dy, length_includes_head=True, head_width=0.15, head_length=0.2, color=color)
+    #plt.annotate("", xytext=mom1, xy=(dx, dy),arrowprops=dict(arrowstyle="->"))
+
+if save:
+    plt.savefig("images\Haldane_arrows.png")
+
+plt.show() """
