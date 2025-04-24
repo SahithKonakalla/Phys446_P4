@@ -49,7 +49,10 @@ class Lattice():
 
         self.periodic = periodic
         if len(periodic) == 0:
-            self.periodic = False
+            if self.dims > 0:
+                self.periodic = [True for i in range(self.dims)]
+            else:
+                self.periodic = True
 
         self.matrix_dim = len(self.labels)
 
@@ -238,31 +241,41 @@ class Lattice():
         pos = []
         if self.dims > 1:
             for dim in range(self.dims):
-                pos.append((label[0][dim] + vector[dim] - 1) % self.Nshape[dim] + 1)
+                if self.periodic[dim] or label[0][dim] + vector[dim] <= self.Nshape[dim]:
+                    pos.append((label[0][dim] + vector[dim] - 1) % self.Nshape[dim] + 1)
         else:
-            pos = (label[0] + vector[0] - 1) % self.Nshape + 1
+            if self.periodic or label[0] + vector <= self.Nshape:
+                pos = (label[0] + vector[0] - 1) % self.Nshape + 1
 
         site = chr((ord(label[1]) - ord("a") + vector[-1]) % self.sites + ord("a"))
 
+        if len(pos) < self.dims: # No site at vector
+            return (-1,), False
+
         if self.dims > 1:
-            return (tuple(pos), site)
+            return (tuple(pos), site), True
         else:
-            return (pos, site)
+            return (pos, site), True
     
     def getMomentumNeighbor(self, mlabel, vector):
         mom = []
         if self.dims > 1:
             for dim in range(self.dims):
-                mom.append((mlabel[0][dim] + vector[dim]) % self.Nshape[dim])
+                if self.periodic[dim] or mlabel[0][dim] + vector[dim] < self.Nshape[dim]:
+                    mom.append((mlabel[0][dim] + vector[dim]) % self.Nshape[dim])
         else:
-            mom = (mlabel[0] + vector[0]) % self.Nshape
+            if self.periodic or mlabel[0] + vector < self.Nshape:
+                mom = (mlabel[0] + vector[0]) % self.Nshape
 
         site = chr((ord(mlabel[1]) - ord("a") + vector[-1]) % self.sites + ord("a"))
 
+        if len(mom) < self.dims: # No site at vector
+            return (-1,), False
+
         if self.dims > 1:
-            return (tuple(mom), site)
+            return (tuple(mom), site), True
         else:
-            return (mom, site)
+            return (mom, site), True
 
     def GetBounds(self):
         if self.dims > 1:
@@ -351,21 +364,27 @@ class Lattice():
                 for dist_site in range(len(self.site_coordination)): # Loop nearest to farthest sites asked for
                     vector_list = site_vector_list[dist_site] # Get list of vectors at that distance
                     for vector in vector_list: # Loop through those vectors
-                        label2 = self.getNeighbor(label1, vector) # Get label of site after moving vector
+                        label2, exists = self.getNeighbor(label1, vector) # Get label of site after moving vector
+                        if not exists:
+                            continue
                         j = self.LabelToIndex(label2)
                         
                         H[i, j] = self.site_coordination[dist_site]
             else:
                 vector_list = site_vector_list[0] # Get list of vectors at that distance
                 for vector in vector_list: # Loop through those vectors
-                    label2 = self.getNeighbor(label1, vector) # Get label of site after moving vector
+                    label2, exists = self.getNeighbor(label1, vector) # Get label of site after moving vector
+                    if not exists:
+                        continue
                     j = self.LabelToIndex(label2)
                     
                     H[i, j] = self.site_coordination
             
             # Special Hops
             for hop in self.special_hops:
-                label2 = self.getNeighbor(label1, hop[0]) # Get label of site after moving vector
+                label2, exists = self.getNeighbor(label1, hop[0]) # Get label of site after moving vector
+                if not exists:
+                    continue
                 j = self.LabelToIndex(label2)
                 
                 H[i, j] = hop[1]
@@ -373,7 +392,9 @@ class Lattice():
             # Special Site Hops
             if len(self.special_site_hops) > 0:
                 for hop in self.special_site_hops[current_site]:
-                    label2 = self.getNeighbor(label1, hop[0]) # Get label of site after moving vector
+                    label2, exists = self.getNeighbor(label1, hop[0]) # Get label of site after moving vector
+                    if not exists:
+                        continue
                     j = self.LabelToIndex(label2)
                     
                     H[i, j] = hop[1]
@@ -477,8 +498,6 @@ class Lattice():
             sorted_energy = np.sort(self.energies.ravel())
             return (sorted_energy[self.matrix_dim//2-1] + sorted_energy[self.matrix_dim//2])/2
 
-
-
     def calculateLabelBerryFlux(self, mlabel):
         total = 1
         phase = 0
@@ -486,7 +505,9 @@ class Lattice():
         mlabel1 = mlabel
         current_site = ord(mlabel1[1]) - ord("a")
         for i in range(len(vector_list)):
-            mlabel2 = self.getMomentumNeighbor(mlabel1, vector_list[i])
+            mlabel2, exists = self.getMomentumNeighbor(mlabel1, vector_list[i])
+            if not exists:
+                return 0
 
             #print(mlabel1, mlabel2)
             #arrow_list.append((mlabel1, mlabel2))
@@ -807,7 +828,9 @@ if save:
     plt.savefig("images/Haldane_EvM.png") 
 plt.show() """
 
-""" M_1 = 0.8
+""" save = True
+
+M_1 = 0.8
 M_2 = 1.2
 tp = 0.3
 phi = 0.7
@@ -818,8 +841,6 @@ special_hops_b = [((1, 0, 0), backward), ((-1, 1, 0), backward), ((0, -1, 0), ba
 special_site_hops = [special_hops_a,special_hops_b]
 haldane1 = Lattice((50,50), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M_1, -M_1], special_site_hops=special_site_hops)
 haldane2 = Lattice((50,50), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M_2, -M_2], special_site_hops=special_site_hops)
-
-save = True
 
 kx = haldane1.momentums[0]
 ky = haldane1.momentums[1]
@@ -867,14 +888,14 @@ for site in range(haldane2.sites):
     plt.grid(True, linestyle='--', alpha=0.5)
 
 if save:
-    plt.savefig("images/Berry_0_8_contour.png")
+    plt.savefig("images/Berry_1_2_contour.png")
 
 print("Chern M = 0.8:", haldane1.calculateChernNumber())
 print("Chern M = 1.2:", haldane2.calculateChernNumber())
 
 plt.show() """
 
-save = True
+""" save = True
 
 tp = 0.3
 phi = 0.7
@@ -902,7 +923,7 @@ plt.ylabel("Chern Number")
 
 if save:
     plt.savefig("images/Haldane_CvM.png") 
-plt.show()
+plt.show() """
 
 """ save = True
 
@@ -962,3 +983,40 @@ if save:
     plt.savefig("images\Haldane_arrows.png")
 
 plt.show() """
+
+""" save = True
+
+M_1 = 0.2
+M_2 = 2.0
+tp = 0.3
+phi = 0.7
+forward = -tp*np.exp(1j*phi)
+backward = -tp*np.exp(-1j*phi)
+special_hops_a = [((1, 0, 0), forward), ((-1, 1, 0), forward), ((0, -1, 0), forward), ((-1, 0, 0), backward), ((1, -1, 0), backward), ((0, 1, 0), backward)]
+special_hops_b = [((1, 0, 0), backward), ((-1, 1, 0), backward), ((0, -1, 0), backward), ((-1, 0, 0), forward), ((1, -1, 0), forward), ((0, 1, 0), forward)]
+special_site_hops = [special_hops_a,special_hops_b]
+haldane1 = Lattice((15,15), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M_1, -M_1], special_site_hops=special_site_hops, periodic=[False, True])
+haldane2 = Lattice((15,15), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M_2, -M_2], special_site_hops=special_site_hops, periodic=[False, True])
+
+print("Chern M = 0.2:", haldane1.calculateChernNumber())
+print("Chern M = 2.0:", haldane2.calculateChernNumber())
+
+plt.show()
+
+plt.scatter(haldane1.momentums[1], haldane1.energies[0])
+plt.scatter(haldane1.momentums[1], haldane1.energies[1])
+plt.xlabel("ky")
+plt.ylabel("E")
+plt.legend(["M = 0.2, Band 1", "M = 0.2, Band 2"])
+if save:
+    plt.savefig("images/Haldane_02_non_periodic.png")
+
+plt.show()
+
+plt.scatter(haldane2.momentums[1], haldane2.energies[0])
+plt.scatter(haldane2.momentums[1], haldane2.energies[1])
+plt.xlabel("ky")
+plt.ylabel("E")
+plt.legend(["M = 2.0, Band 1", "M = 2.0, Band 2"])
+if save:
+    plt.savefig("images/Haldane_20_non_periodic.png") """
