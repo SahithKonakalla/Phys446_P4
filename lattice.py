@@ -6,7 +6,7 @@ import scipy
 import scipy.linalg
 import time
 
-#arrow_list = []
+arrow_list = []
 
 class Lattice():
     def __init__(self, Nshape, sites, lattice_vectors=1, sublattice_vectors=0, site_coordination=-1, site_potential=0, special_hops=[], special_site_hops=[], periodic=[]):
@@ -46,13 +46,6 @@ class Lattice():
         self.neighbor_vectors = self.NeighborVectors()
         if debug:
             print(f"NeighborVectors took {time.time() - start_time:.4f} seconds")
-
-        self.periodic = periodic
-        if len(periodic) == 0:
-            if self.dims > 0:
-                self.periodic = [True for i in range(self.dims)]
-            else:
-                self.periodic = True
 
         self.matrix_dim = len(self.labels)
 
@@ -116,10 +109,13 @@ class Lattice():
         else:
             max_index = self.Nshape*self.sites
 
+        #print("max index:", max_index)
         for i in range(max_index):
             site = i % self.sites
 
             j = i // self.sites
+
+            #print(i, j, site)
 
             if self.dims > 1:
                 pos = []
@@ -127,7 +123,7 @@ class Lattice():
                     pos.append(j % dim + 1)
                     j =  j // dim
                 
-                labels.append((tuple(pos[::-1]), chr(ord('a')+site)))
+                labels.append((tuple(pos), chr(ord('a')+site)))
             else:
                 labels.append((j % self.Nshape + 1, chr(ord('a')+site)))
 
@@ -159,7 +155,7 @@ class Lattice():
         if self.dims > 1:
             for dim in range(self.dims):
                 mult = self.sites
-                for i in range(dim+1, self.dims):
+                for i in range(0, dim):
                     mult *= self.Nshape[i]
                 index += (label[0][dim]-1)*mult
         else:
@@ -200,7 +196,7 @@ class Lattice():
                     pos.append(j % dim)
                     j =  j // dim
                 
-                labels.append((tuple(pos[::-1]), chr(ord('a')+site)))
+                labels.append((tuple(pos), chr(ord('a')+site)))
             else:
                 labels.append((j % self.Nshape, chr(ord('a')+site)))
 
@@ -241,11 +237,9 @@ class Lattice():
         pos = []
         if self.dims > 1:
             for dim in range(self.dims):
-                if self.periodic[dim] or label[0][dim] + vector[dim] <= self.Nshape[dim]:
-                    pos.append((label[0][dim] + vector[dim] - 1) % self.Nshape[dim] + 1)
+                pos.append((label[0][dim] + vector[dim] - 1) % self.Nshape[dim] + 1)
         else:
-            if self.periodic or label[0] + vector <= self.Nshape:
-                pos = (label[0] + vector[0] - 1) % self.Nshape + 1
+            pos = (label[0] + vector[0] - 1) % self.Nshape + 1
 
         site = chr((ord(label[1]) - ord("a") + vector[-1]) % self.sites + ord("a"))
 
@@ -261,16 +255,11 @@ class Lattice():
         mom = []
         if self.dims > 1:
             for dim in range(self.dims):
-                if self.periodic[dim] or mlabel[0][dim] + vector[dim] < self.Nshape[dim]:
-                    mom.append((mlabel[0][dim] + vector[dim]) % self.Nshape[dim])
+                mom.append((mlabel[0][dim] + vector[dim]) % self.Nshape[dim])
         else:
-            if self.periodic or mlabel[0] + vector < self.Nshape:
-                mom = (mlabel[0] + vector[0]) % self.Nshape
+            mom = (mlabel[0] + vector[0]) % self.Nshape
 
         site = chr((ord(mlabel[1]) - ord("a") + vector[-1]) % self.sites + ord("a"))
-
-        if len(mom) < self.dims: # No site at vector
-            return (-1,), False
 
         if self.dims > 1:
             return (tuple(mom), site), True
@@ -369,6 +358,7 @@ class Lattice():
                             continue
                         j = self.LabelToIndex(label2)
                         
+                        arrow_list.append((label1, label2))
                         H[i, j] = self.site_coordination[dist_site]
             else:
                 vector_list = site_vector_list[0] # Get list of vectors at that distance
@@ -378,6 +368,7 @@ class Lattice():
                         continue
                     j = self.LabelToIndex(label2)
                     
+                    arrow_list.append((label1, label2))
                     H[i, j] = self.site_coordination
             
             # Special Hops
@@ -397,6 +388,7 @@ class Lattice():
                         continue
                     j = self.LabelToIndex(label2)
                     
+                    arrow_list.append((label1, label2))
                     H[i, j] = hop[1]
 
         return H
@@ -516,7 +508,8 @@ class Lattice():
             index2 = (self.LabelToIndex(self.MomentumLabelToLabel(mlabel2)) // self.sites)
             
             #p = np.angle(self.eigenvectors[current_site][index1].ravel() @ self.eigenvectors[current_site][index2].ravel())
-            phase += np.angle(np.conj(self.eigenvectors[current_site][index1].ravel()) @ self.eigenvectors[current_site][index2].ravel())
+            #phase += np.angle(np.conj(self.eigenvectors[current_site][index1].ravel()) @ self.eigenvectors[current_site][index2].ravel())
+            #print(self.eigenvectors.shape)
             total *= (np.conj(self.eigenvectors[current_site][index1].ravel()) @ self.eigenvectors[current_site][index2].ravel())
             mlabel1 = mlabel2
         
@@ -536,7 +529,13 @@ class Lattice():
     def calculateChernNumber(self):
         return np.round(np.sum(self.berry_flux[0])/(2*np.pi),5)
         # return np.array([np.sum(self.berry_flux[i])/(2*np.pi) for i in range(self.sites)])
-    
+
+
+""" test = Lattice((4,2), 1, [(1, 0), (0, 1)])
+pos = [test.LabelToR(label) for label in test.labels]
+plt.plot(*zip(*pos), marker='o', color='r', ls='')
+plt.show() """
+
 # Hydrogen
 #hydrogen = Lattice(100, 1, 1, 0)
 #print("Hydrogen:")
@@ -590,6 +589,11 @@ if save:
 plt.show() """
 
 #Graphene
+
+""" graphene = Lattice((9,10), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))])
+pos = [graphene.LabelToR(label) for label in graphene.labels]
+plt.plot(*zip(*pos), marker='o', color='r', ls='')
+plt.show() """
 
 """ graphene = Lattice((50,50), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))])
 #print("Graphene:")
@@ -650,7 +654,7 @@ plt.tight_layout()
 if save:
     plt.savefig("images/Graphene_Evk_with_slice.png")
 
-save = True
+save = False
 pos = [graphene.LabelToR(label) for label in graphene.labels]
 
 plt.figure()
@@ -702,7 +706,7 @@ plt.show() """
 """ M = 1
 boron_nitride = Lattice((50,50), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M, -M])
 print("Boron Nitride:")
-save = True
+save = False
 plt.figure()
 plt.matshow(boron_nitride.Hk.real)
 if save:
@@ -992,31 +996,139 @@ tp = 0.3
 phi = 0.7
 forward = -tp*np.exp(1j*phi)
 backward = -tp*np.exp(-1j*phi)
-special_hops_a = [((1, 0, 0), forward), ((-1, 1, 0), forward), ((0, -1, 0), forward), ((-1, 0, 0), backward), ((1, -1, 0), backward), ((0, 1, 0), backward)]
-special_hops_b = [((1, 0, 0), backward), ((-1, 1, 0), backward), ((0, -1, 0), backward), ((-1, 0, 0), forward), ((1, -1, 0), forward), ((0, 1, 0), forward)]
-special_site_hops = [special_hops_a,special_hops_b]
-haldane1 = Lattice((15,15), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M_1, -M_1], special_site_hops=special_site_hops, periodic=[False, True])
-haldane2 = Lattice((15,15), 2, [(1, 0), (1/2, np.sqrt(3)/2)], [(0,0), (0, 1/np.sqrt(3))], site_potential=[M_2, -M_2], special_site_hops=special_site_hops, periodic=[False, True])
+
+Ny = 25
+
+site_vectors = []
+for i in range(Ny):
+    for j in range(2):
+        site_vectors.append((i*1, j*1/np.sqrt(3)))
+
+site_potential_1 = []
+for i in range(Ny):
+    for j in range(2):
+        if j == 0:
+            site_potential_1.append(M_1)
+        else:
+            site_potential_1.append(-M_1)
+
+site_potential_2 = []
+for i in range(Ny):
+    for j in range(2):
+        if j == 0:
+            site_potential_2.append(M_2)
+        else:
+            site_potential_2.append(-M_2)
+
+
+special_site_hops = []
+for i in range(Ny):
+    for j in range(2):
+        if i == 0:
+            if j == 0:
+                special_site_hops.append([((0, 0, 2), forward), 
+                                          ((0, -1, 0), forward), 
+                                          ((0, -1, 2), backward), 
+                                          ((0, 1, 0), backward)])
+            else:
+                special_site_hops.append([((0, 0, 2), backward), 
+                                          ((0, -1, 0), backward), 
+                                          ((0, -1, 2), forward), 
+                                          ((0, 1, 0), forward)])
+        elif i == Ny-1:
+            if j == 0:
+                special_site_hops.append([((0, 1, -2), forward), 
+                                          ((0, -1, 0), forward), 
+                                          ((0, 0, -2), backward), 
+                                          ((0, 1, 0), backward)])
+            else:
+                special_site_hops.append([((0, 1, -2), backward), 
+                                          ((0, -1, 0), backward), 
+                                          ((0, 0, -2), forward), 
+                                          ((0, 1, 0), forward)])
+        else:
+            if j == 0:
+                special_site_hops.append([((0, 0, 2), forward), 
+                                          ((0, 1, -2), forward), 
+                                          ((0, -1, 0), forward), 
+                                          ((0, 0, -2), backward), 
+                                          ((0, -1, 2), backward), 
+                                          ((0, 1, 0), backward)])
+            else:
+                special_site_hops.append([((0, 0, 2), backward), 
+                                          ((0, 1, -2), backward), 
+                                          ((0, -1, 0), backward), 
+                                          ((0, 0, -2), forward), 
+                                          ((0, -1, 2), forward), 
+                                          ((0, 1, 0), forward)])
+
+
+haldane1 = Lattice((1,Ny), 2*Ny, [(1, 0), (1/2, np.sqrt(3)/2)], site_vectors, site_potential=site_potential_1, special_site_hops=special_site_hops, periodic=[False, True])
+haldane2 = Lattice((1,Ny), 2*Ny, [(1, 0), (1/2, np.sqrt(3)/2)], site_vectors, site_potential=site_potential_2, special_site_hops=special_site_hops, periodic=[False, True])
 
 print("Chern M = 0.2:", haldane1.calculateChernNumber())
 print("Chern M = 2.0:", haldane2.calculateChernNumber())
 
+pos = [haldane1.LabelToR(label) for label in haldane1.labels]
+plt.figure()
+plt.plot(*zip(*pos), marker='o', color='b', ls='')
+plt.title("Haldane Atoms")
+plt.xlabel("x")
+plt.ylabel("y") """
+
+""" 
+for arrow in arrow_list:
+    label1 = arrow[0]
+    label2 = arrow[1]
+
+    print(label1, label2)
+    color_list = "rbrbrbrbrbrbrbrbrbrb"
+    color = color_list[ord(label1[1]) - ord("a")]
+
+    dx = label2[0][0] - label1[0][0]
+    dy = label2[0][1] - label1[0][1]
+
+    if dx > 1:
+        label2 = ((label1[0][0]-1, label1[0][1]), label1[1])
+    if dx < -1:
+        label2 = ((label1[0][0]+1, label1[0][1]), label1[1])
+    
+    if dy > 1:
+        label2 = ((label1[0][0], label1[0][1]-1), label1[1])
+    if dy < -1:
+        label2 = ((label1[0][0], label1[0][1]+1), label1[1])
+
+    pos1 = haldane1.LabelToR(label1)
+    pos2 = haldane1.LabelToR(label2)
+
+    dx = pos2[0] - pos1[0]
+    dy = pos2[1] - pos1[1]
+
+    plt.arrow(pos1[0],pos1[1], dx, dy, length_includes_head=True, head_width=0.15, head_length=0.2, color=color) """
+
+""" plt.show()
+
+plt.matshow(haldane2.H.real)
+plt.show()
+plt.matshow(haldane2.Hk.real)
+plt.title("Hk")
 plt.show()
 
-plt.scatter(haldane1.momentums[1], haldane1.energies[0])
-plt.scatter(haldane1.momentums[1], haldane1.energies[1])
+for i in range(2*Ny):
+    plt.scatter(haldane1.momentums[1], haldane1.energies[i], color = "b")
+#plt.scatter(haldane1.momentums[1], haldane1.energies[1])
 plt.xlabel("ky")
 plt.ylabel("E")
-plt.legend(["M = 0.2, Band 1", "M = 0.2, Band 2"])
 if save:
     plt.savefig("images/Haldane_02_non_periodic.png")
 
 plt.show()
 
-plt.scatter(haldane2.momentums[1], haldane2.energies[0])
-plt.scatter(haldane2.momentums[1], haldane2.energies[1])
+for i in range(2*Ny):
+    plt.scatter(haldane2.momentums[1], haldane2.energies[i], color = "b")
 plt.xlabel("ky")
 plt.ylabel("E")
-plt.legend(["M = 2.0, Band 1", "M = 2.0, Band 2"])
 if save:
-    plt.savefig("images/Haldane_20_non_periodic.png") """
+    plt.savefig("images/Haldane_20_non_periodic.png")
+
+plt.show() """
